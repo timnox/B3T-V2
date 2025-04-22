@@ -15,14 +15,22 @@ module.exports = {
     usage: 'mute <membre> [temps]',
     description: `Permet de rendre muet un utilisateur sur le serveur`,
     async execute(client, message, args) {
-        let pf = p.fetch(`prefix_${message.guild.id}`);
-        if (pf == null) pf = config.bot.prefixe;
+        // Préfixe de la commande pour ce serveur
+        let pf = await p.fetch(`prefix_${message.guild.id}`);
+        if (!pf) pf = config.bot.prefixe;
 
-        const perm1 = p1.fetch(`perm1_${message.guild.id}`);
-        const perm2 = p2.fetch(`perm2_${message.guild.id}`);
-        const perm3 = p3.fetch(`perm3_${message.guild.id}`);
+        // Permissions des rôles
+        const perm1 = await p1.fetch(`perm1_${message.guild.id}`);
+        const perm2 = await p2.fetch(`perm2_${message.guild.id}`);
+        const perm3 = await p3.fetch(`perm3_${message.guild.id}`);
 
-        if (owner.get(`owners.${message.author.id}`) || message.member.roles.cache.has(perm1) || message.member.roles.cache.has(perm2) || message.member.roles.cache.has(perm3) || config.bot.buyer.includes(message.author.id)   === true) {
+        // Vérification des permissions de l'utilisateur
+        if (owner.get(`owners.${message.author.id}`) || 
+            message.member.roles.cache.has(perm1) || 
+            message.member.roles.cache.has(perm2) || 
+            message.member.roles.cache.has(perm3) || 
+            config.bot.buyer.includes(message.author.id)) {
+
             let target = message.mentions.members.first() || message.guild.members.cache.get(args[0]);
 
             if (!args[0]) return message.channel.send(`**Veuillez mentionner un utilisateur ou fournir son ID !**`);
@@ -32,13 +40,13 @@ module.exports = {
             if (args[1]) {
                 duration = parseDuration(args[1]);
                 if (isNaN(duration) || duration < 0 || duration > 28 * 24 * 60 * 60 * 1000) {
-                    return message.channel.send(`**Veuillez fournir une durée valide | en m/h/j | inférieur à 27j!**`);
+                    return message.channel.send(`**Veuillez fournir une durée valide | en m/h/j | inférieur à 28 jours !**`);
                 }
             } else {
-                duration = 28 * 24 * 60 * 60 * 1000; 
+                duration = 28 * 24 * 60 * 60 * 1000; // Durée par défaut : 28 jours
             }
 
-            var reason = args.slice(2).join(" ") || 'Sans raison';
+            const reason = args.slice(2).join(" ") || 'Sans raison';
 
             if (target.id === message.author.id) return message.channel.send(`**Vous ne pouvez pas vous rendre muet vous-même !**`);
 
@@ -50,8 +58,10 @@ module.exports = {
                     .setDescription(`**Action**: Mute\n**Utilisateur**: ${target.user.tag} (${target.id})\n**Modérateur**: ${message.author.tag}\n**Durée**: ${ms(duration, { long: true })}\n**Raison**: ${reason}`)
                     .setTimestamp()
                     .setFooter(footer);
+
                 const logchannel = client.channels.cache.get(ml.get(`${message.guild.id}.modlog`));
                 if (logchannel) logchannel.send({ embeds: [embed] }).catch(() => false);
+
             } catch (err) {
                 console.error(err);
                 message.channel.send(`**Une erreur s'est produite en essayant de rendre muet ${target}.**`);
@@ -62,12 +72,13 @@ module.exports = {
     }
 };
 
+// Fonction pour analyser la durée au format (m/h/j)
 function parseDuration(duration) {
     const timeUnits = {
         s: 1000,
         m: 60 * 1000,
         h: 60 * 60 * 1000,
-        j: 24 * 60 * 60 * 1000, 
+        j: 24 * 60 * 60 * 1000,
     };
 
     if (typeof duration !== 'string') return NaN;
@@ -81,6 +92,7 @@ function parseDuration(duration) {
     return value * timeUnits[unit];
 }
 
+// Fonction pour formater la durée en format lisible
 function ms(duration, options) {
     const seconds = Math.floor((duration / 1000) % 60);
     const minutes = Math.floor((duration / (1000 * 60)) % 60);

@@ -12,12 +12,11 @@ module.exports = {
     usage: 'temprole <membre> <role> <durée> | temprole list',
     description: `Permet d'ajouter un rôle temporaire à un membre ou de voir la liste des rôles temporaires.`,
     async execute(client, message, args) {
-        let color = cl.fetch(`color_${message.guild.id}`);
-        if (color == null) color = config.bot.couleur;
+        let color = await cl.fetch(`color_${message.guild.id}`) || config.bot.couleur;
 
-        if (owner.get(`owners.${message.author.id}`) || config.bot.buyer.includes(message.author.id)   || message.member.roles.cache.has(pgs.get(`permgs_${message.guild.id}`))) {
+        if (owner.get(`owners.${message.author.id}`) || config.bot.buyer.includes(message.author.id) || message.member.roles.cache.has(await pgs.fetch(`permgs_${message.guild.id}`))) {
             if (args[0] === 'list') {
-                let allTempRoles = temproles.fetch(`temproles_${message.guild.id}`) || [];
+                let allTempRoles = await temproles.fetch(`temproles_${message.guild.id}`) || [];
                 if (allTempRoles.length === 0) {
                     return message.channel.send("Aucun rôle temporaire en cours.");
                 }
@@ -26,7 +25,7 @@ module.exports = {
                     .setColor(color)
                     .setTitle("Liste des rôles temporaires")
                     .setDescription(allTempRoles.map((r, i) => `${i + 1}. <@${r.userId}> - <@&${r.roleId}> jusqu'à ${new Date(r.expireAt).toLocaleString()}`).join("\n"))
-                    .setFooter({ text: `4Protect` });
+                    .setFooter("4Protect");
 
                 const row = new Discord.MessageActionRow()
                     .addComponents(
@@ -68,7 +67,7 @@ module.exports = {
                             selectMessage.delete();
 
                             allTempRoles.splice(selectedIndex, 1);
-                            temproles.set(`temproles_${message.guild.id}`, allTempRoles);
+                            await temproles.set(`temproles_${message.guild.id}`, allTempRoles);
 
                             const member = message.guild.members.cache.get(selectedTempRole.userId);
                             const role = message.guild.roles.cache.get(selectedTempRole.roleId);
@@ -93,7 +92,6 @@ module.exports = {
                         messageSent.edit({ content: "Temps écoulé pour retirer un rôle temporaire.", components: [] });
                     }
                 });
-
             } else {
                 if (args.length < 3) {
                     return message.channel.send("Usage: `temprole <membre> <role> <durée>`");
@@ -107,16 +105,22 @@ module.exports = {
 
                 let duration = args[2];
                 let durationMs;
-                if (duration.endsWith('m')) {
-                    durationMs = parseInt(duration) * 60000;
-                } else if (duration.endsWith('h')) {
-                    durationMs = parseInt(duration) * 3600000;
-                } else if (duration.endsWith('j')) {
-                    let days = parseInt(duration);
-                    if (days > 30) {
-                        return message.channel.send("La durée maximale est de 30 jours.");
+                const durationRegex = /(\d+)(m|h|j)/;
+
+                if (durationRegex.test(duration)) {
+                    const [, value, unit] = duration.match(durationRegex);
+                    switch (unit) {
+                        case 'm':
+                            durationMs = parseInt(value) * 60000;
+                            break;
+                        case 'h':
+                            durationMs = parseInt(value) * 3600000;
+                            break;
+                        case 'j':
+                            if (parseInt(value) > 30) return message.channel.send("La durée maximale est de 30 jours.");
+                            durationMs = parseInt(value) * 86400000;
+                            break;
                     }
-                    durationMs = days * 86400000;
                 } else {
                     return message.channel.send("Durée invalide. Utilisez m (minutes), h (heures), j (jours).");
                 }
@@ -126,7 +130,7 @@ module.exports = {
                 await member.roles.add(role, `Rôle temporaire ajouté par ${message.author.tag}`);
 
                 let expireAt = Date.now() + durationMs;
-                temproles.push(`temproles_${message.guild.id}`, {
+                await temproles.push(`temproles_${message.guild.id}`, {
                     userId: member.id,
                     roleId: role.id,
                     expireAt: expireAt
@@ -136,16 +140,17 @@ module.exports = {
 
                 setTimeout(async () => {
                     await member.roles.remove(role, `Rôle temporaire expiré`);
-                    let updatedTempRoles = temproles.fetch(`temproles_${message.guild.id}`) || [];
+                    let updatedTempRoles = await temproles.fetch(`temproles_${message.guild.id}`) || [];
                     updatedTempRoles = updatedTempRoles.filter(r => r.userId !== member.id || r.roleId !== role.id);
-                    temproles.set(`temproles_${message.guild.id}`, updatedTempRoles);
+                    await temproles.set(`temproles_${message.guild.id}`, updatedTempRoles);
                 }, durationMs);
 
                 const embed = new Discord.MessageEmbed()
                     .setColor(color)
                     .setDescription(`➕ <@${message.author.id}> a utilisé la commande \`temprole\` sur ${member}\nRôle ajouté : ${role}\nDurée : ${duration}`)
                     .setTimestamp()
-                    .setFooter({ text: `📚` });
+                    .setFooter("📚");
+
                 const logchannel = client.channels.cache.get(ml.get(`${message.guild.id}.modlog`));
                 if (logchannel) logchannel.send({ embeds: [embed] }).catch(() => false);
             }
